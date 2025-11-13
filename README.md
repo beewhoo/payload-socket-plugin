@@ -1,0 +1,381 @@
+# Payload Socket Plugin
+
+[![npm version](https://badge.fury.io/js/payload-socket-plugin.svg)](https://www.npmjs.com/package/payload-socket-plugin)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/node/v/payload-socket-plugin.svg)](https://nodejs.org)
+
+Real-time event broadcasting plugin for Payload CMS using Socket.IO with Redis support for multi-instance deployments.
+
+## Features
+
+- ✅ **Real-time Events**: Broadcast collection changes (create, update, delete) to connected clients
+- ✅ **Redis Support**: Multi-instance synchronization using Redis adapter
+- ✅ **Per-Collection Authorization**: Fine-grained control over who receives events
+- ✅ **JWT Authentication**: Secure WebSocket connections using Payload's JWT tokens
+- ✅ **TypeScript**: Full type safety with TypeScript definitions
+- ✅ **Flexible Configuration**: Customize CORS, paths, and event handling
+
+## Prerequisites
+
+- **Node.js**: >= 20.0.0
+- **Payload CMS**: >= 2.0.0
+- **Redis** (optional): Required for multi-instance deployments
+
+## Installation
+
+```bash
+npm install payload-socket-plugin
+# or
+yarn add payload-socket-plugin
+# or
+pnpm add payload-socket-plugin
+```
+
+### Install Socket.IO Client (for frontend)
+
+```bash
+npm install socket.io-client
+```
+
+## Quick Start
+
+### 1. Configure the Plugin
+
+```typescript
+// payload.config.ts
+import { buildConfig } from "payload/config";
+import { socketPlugin } from "payload-socket-plugin";
+
+export default buildConfig({
+  // ... other config
+  plugins: [
+    socketPlugin({
+      enabled: true,
+      redis: {
+        url: process.env.REDIS_URL,
+      },
+      socketIO: {
+        cors: {
+          origin: ["http://localhost:3000"],
+          credentials: true,
+        },
+        path: "/socket.io",
+      },
+      includeCollections: ["projects", "posts"],
+      authorize: {
+        projects: async (user, event) => {
+          // Only allow project owner to receive events
+          return user.id === event.doc.user;
+        },
+        posts: async (user, event) => {
+          // Allow everyone to receive public post events
+          return event.doc.isPublic || user.id === event.doc.user;
+        },
+      },
+    }),
+  ],
+});
+```
+
+### 2. Initialize Socket.IO Server
+
+```typescript
+// server.ts
+import express from "express";
+import payload from "payload";
+import { initSocketIO } from "payload-socket-plugin";
+
+const app = express();
+
+// Initialize Payload
+await payload.init({
+  secret: process.env.PAYLOAD_SECRET,
+  express: app,
+});
+
+// Start HTTP server
+const server = app.listen(3000, () => {
+  console.log("Server running on port 3000");
+});
+
+// Initialize Socket.IO
+await initSocketIO(server);
+```
+
+### 3. Connect from Client
+
+```typescript
+// client.ts
+import { io } from "socket.io-client";
+
+const socket = io("http://localhost:3000", {
+  auth: {
+    token: "your-jwt-token", // Get from Payload login
+  },
+});
+
+// Subscribe to collection events
+socket.emit("join-collection", "projects");
+
+// Listen for events
+socket.on("payload:event", (event) => {
+  console.log("Event received:", event);
+  // {
+  //   type: 'update',
+  //   collection: 'projects',
+  //   id: '123',
+  //   doc: { ... },
+  //   user: { id: '456', email: 'user@example.com' },
+  //   timestamp: '2024-01-01T00:00:00.000Z'
+  // }
+});
+```
+
+## Configuration Options
+
+### `RealtimeEventsPluginOptions`
+
+| Option               | Type       | Default | Description                                             |
+| -------------------- | ---------- | ------- | ------------------------------------------------------- |
+| `enabled`            | `boolean`  | `true`  | Enable/disable the plugin                               |
+| `includeCollections` | `string[]` | `[]`    | Collections to enable real-time events for              |
+| `redis`              | `object`   | -       | Redis configuration for multi-instance support          |
+| `socketIO`           | `object`   | -       | Socket.IO server options (CORS, path, etc.)             |
+| `authorize`          | `object`   | -       | Per-collection authorization handlers                   |
+| `shouldEmit`         | `function` | -       | Filter function to determine if event should be emitted |
+| `transformEvent`     | `function` | -       | Transform events before emitting                        |
+
+## Authorization
+
+Authorization handlers determine which users can receive events for specific documents.
+
+```typescript
+import type { CollectionAuthorizationHandler } from "payload-socket-plugin";
+
+const authorizeProject: CollectionAuthorizationHandler = async (
+  user,
+  event
+) => {
+  // Admin can see all events
+  if (user.role === "admin") {
+    return true;
+  }
+
+  // Check if user owns the project
+  const project = await payload.findByID({
+    collection: "projects",
+    id: event.id as string,
+  });
+
+  return user.id === project.user;
+};
+
+// Use in plugin config
+socketPlugin({
+  authorize: {
+    projects: authorizeProject,
+  },
+});
+```
+
+## Client Events
+
+### Subscribing to Collections
+
+```typescript
+// Subscribe to a single collection
+socket.emit("join-collection", "projects");
+
+// Subscribe to multiple collections
+socket.emit("subscribe", ["projects", "posts"]);
+
+// Unsubscribe
+socket.emit("unsubscribe", ["projects"]);
+```
+
+### Listening for Events
+
+```typescript
+// Listen to specific collection events
+socket.on("payload:event", (event) => {
+  if (event.collection === "projects" && event.type === "update") {
+    // Handle project update
+  }
+});
+
+// Listen to all events
+socket.on("payload:event:all", (event) => {
+  console.log("Any event:", event);
+});
+```
+
+## Advanced Usage
+
+### Custom Event Filtering
+
+```typescript
+socketPlugin({
+  shouldEmit: (event) => {
+    // Only emit events for published documents
+    return event.doc?.status === "published";
+  },
+});
+```
+
+### Event Transformation
+
+```typescript
+socketPlugin({
+  transformEvent: (event) => {
+    // Remove sensitive data before emitting
+    const { doc, ...rest } = event;
+    return {
+      ...rest,
+      doc: {
+        id: doc.id,
+        title: doc.title,
+        // Omit sensitive fields
+      },
+    };
+  },
+});
+```
+
+## How It Works
+
+```
+┌─────────────┐         ┌──────────────┐         ┌─────────────┐
+│   Client    │◄───────►│  Socket.IO   │◄───────►│   Payload   │
+│ (Browser)   │  WebSocket │   Server     │  Hooks  │    CMS      │
+└─────────────┘         └──────────────┘         └─────────────┘
+                              │
+                              ▼
+                        ┌──────────────┐
+                        │    Redis     │
+                        │   Adapter    │
+                        └──────────────┘
+                              │
+                    ┌─────────┴─────────┐
+                    ▼                   ▼
+              ┌──────────┐        ┌──────────┐
+              │ Instance │        │ Instance │
+              │    1     │        │    2     │
+              └──────────┘        └──────────┘
+```
+
+**Flow:**
+
+1. Plugin hooks into Payload's `afterChange` and `afterDelete` lifecycle events
+2. When a document changes, the plugin creates an event payload
+3. Event is broadcast via Socket.IO to all connected clients
+4. Authorization handlers determine which users receive the event
+5. Redis adapter ensures events sync across multiple server instances
+
+## Environment Variables
+
+```bash
+# Required for Redis multi-instance support
+REDIS_URL=redis://localhost:6379
+
+# Optional: Payload configuration
+PAYLOAD_SECRET=your-secret-key
+```
+
+## TypeScript Types
+
+```typescript
+import type {
+  CollectionAuthorizationHandler,
+  RealtimeEventPayload,
+  AuthenticatedSocket,
+  EventType,
+} from "payload-socket-plugin";
+```
+
+## Troubleshooting
+
+### Connection Issues
+
+**Problem**: Client can't connect to Socket.IO server
+
+**Solutions**:
+
+- Verify CORS settings in `socketIO.cors` configuration
+- Check that `initSocketIO()` is called after starting the HTTP server
+- Ensure the Socket.IO path matches between server and client (default: `/socket.io`)
+- Verify JWT token is valid and not expired
+
+### Events Not Received
+
+**Problem**: Connected but not receiving events
+
+**Solutions**:
+
+- Check that you've subscribed to the collection: `socket.emit('join-collection', 'collectionName')`
+- Verify the collection is in `includeCollections` array
+- Check authorization handler - it may be blocking events for your user
+- Ensure the event type (create/update/delete) is being triggered
+
+### Redis Connection Issues
+
+**Problem**: Redis adapter not working in multi-instance setup
+
+**Solutions**:
+
+- Verify `REDIS_URL` environment variable is set correctly
+- Check Redis server is running and accessible
+- Ensure both server instances use the same Redis URL
+- Check Redis logs for connection errors
+
+### TypeScript Errors
+
+**Problem**: Type errors when using the plugin
+
+**Solutions**:
+
+- Ensure `payload-socket-plugin` types are installed
+- Check that your `tsconfig.json` includes the plugin's types
+- Verify Payload CMS version compatibility (>= 2.0.0)
+
+## Performance Considerations
+
+- **Redis**: Highly recommended for production multi-instance deployments
+- **Authorization**: Keep authorization handlers lightweight - they run on every event
+- **Event Filtering**: Use `shouldEmit` to reduce unnecessary events
+- **Event Transformation**: Use `transformEvent` to minimize payload size
+
+## Security Considerations
+
+- **JWT Authentication**: All connections require valid Payload JWT tokens
+- **Authorization Handlers**: Always implement proper authorization to prevent data leaks
+- **CORS**: Configure CORS carefully to only allow trusted origins
+- **Event Data**: Be cautious about sensitive data in events - use `transformEvent` to sanitize
+
+## Known Limitations
+
+- Only supports Payload CMS v2.x (v3.x support coming soon)
+- Authorization handlers are called for each connected user on every event
+- No built-in event replay or history mechanism
+- Redis is required for multi-instance deployments
+
+## Changelog
+
+See [CHANGELOG.md](./CHANGELOG.md) for version history.
+
+## License
+
+MIT © [Bibek Thapa](https://github.com/beewhoo)
+
+## Contributing
+
+Contributions are welcome! Please open an issue or PR.
+
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add some amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+## Support
+
+For issues and questions, please [open a GitHub issue](https://github.com/beewhoo/payload-socket-plugin/issues).

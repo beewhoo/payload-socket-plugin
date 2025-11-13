@@ -1,0 +1,56 @@
+{
+  "name": "payload-socket-plugin",
+  "version": "1.0.0",
+  "description": "Real-time Socket.IO plugin for Payload CMS with Redis support",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "browser": "dist/mock.js",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "payload",
+    "payload-plugin",
+    "payload-cms",
+    "socketio",
+    "socket.io",
+    "realtime",
+    "websocket",
+    "redis",
+    "real-time-events"
+  ],
+  "author": "Bibek Thapa",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "peerDependencies": {
+    "payload": "^2.0.0"
+  },
+  "dependencies": {
+    "@socket.io/redis-adapter": "^8.0.0",
+    "ioredis": "^5.3.0",
+    "jsonwebtoken": "^9.0.0",
+    "socket.io": "^4.6.0"
+  },
+  "devDependencies": {
+    "@types/jsonwebtoken": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "payload": "^2.0.0",
+    "typescript": "^5.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:beewhoo/payload-socket-plugin.git"
+  },
+  "homepage": "https://github.com/beewhoo/payload-socket-plugin#readme",
+  "bugs": {
+    "url": "https://github.com/beewhoo/payload-socket-plugin/issues"
+  }
+}
