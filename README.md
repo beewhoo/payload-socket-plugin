@@ -144,6 +144,7 @@ socket.on("payload:event", (event) => {
 | `authorize`          | `object`   | -       | Per-collection authorization handlers                   |
 | `shouldEmit`         | `function` | -       | Filter function to determine if event should be emitted |
 | `transformEvent`     | `function` | -       | Transform events before emitting                        |
+| `onSocketConnection` | `function` | -       | Custom event handlers for each socket connection        |
 
 ## Authorization
 
@@ -210,6 +211,80 @@ socket.on("payload:event:all", (event) => {
 ```
 
 ## Advanced Usage
+
+### Custom Socket Event Handlers
+
+You can register your own custom event handlers that will be attached to each authenticated socket.
+
+**Simple inline handlers:**
+
+```typescript
+socketPlugin({
+  onSocketConnection: (socket, io, payload) => {
+    // Custom event handler
+    socket.on("send-message", async (data) => {
+      const { roomId, message } = data;
+
+      // Broadcast to room
+      io.to(`room:${roomId}`).emit("new-message", {
+        user: socket.user,
+        message,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    // Custom room management
+    socket.on("join-custom-room", (roomId) => {
+      socket.join(`room:${roomId}`);
+      socket.emit("joined-room", { roomId });
+    });
+
+    // Access Payload CMS from your handlers
+    socket.on("get-user-data", async () => {
+      const user = await payload.findByID({
+        collection: "users",
+        id: socket.user!.id as string,
+      });
+      socket.emit("user-data", user);
+    });
+  },
+});
+```
+
+**Organized in separate files (recommended):**
+
+```typescript
+// Import from examples directory
+import { projectHandlers } from "./examples/projectHandlers";
+import { chatHandlers } from "./examples/chatHandlers";
+import { notificationHandlers } from "./examples/notificationHandlers";
+
+// Or import all at once
+import {
+  projectHandlers,
+  chatHandlers,
+  notificationHandlers,
+} from "./examples";
+
+socketPlugin({
+  onSocketConnection: (socket, io, payload) => {
+    // Use one or more pre-built handlers
+    projectHandlers(socket, io, payload);
+    chatHandlers(socket, io, payload);
+    notificationHandlers(socket, io, payload);
+  },
+});
+```
+
+**See the [examples directory](./examples) for complete implementations** including:
+
+| Handler                   | Features                                                             |
+| ------------------------- | -------------------------------------------------------------------- |
+| **Project Collaboration** | Join/leave rooms, permission checking, presence tracking, kick users |
+| **Chat/Messaging**        | Send messages, typing indicators, read receipts                      |
+| **Notifications**         | User notifications, broadcast announcements (admin only)             |
+
+Each example includes full client-side and server-side code with error handling and best practices.
 
 ### Custom Event Filtering
 

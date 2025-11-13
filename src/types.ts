@@ -131,4 +131,28 @@ export interface RealtimeEventsPluginOptions {
    * Custom event transformer
    */
   transformEvent?: (event: RealtimeEventPayload) => RealtimeEventPayload;
+
+  /**
+   * Custom socket event handlers
+   * Register your own event handlers that will be attached to each authenticated socket
+   *
+   * @example
+   * ```ts
+   * onSocketConnection: (socket, io, payload) => {
+   *   socket.on('custom-event', (data) => {
+   *     // Handle custom event
+   *     socket.emit('custom-response', { success: true });
+   *   });
+   *
+   *   socket.on('join-room', (roomId) => {
+   *     socket.join(`custom:${roomId}`);
+   *   });
+   * }
+   * ```
+   */
+  onSocketConnection?: (
+    socket: AuthenticatedSocket,
+    io: any,
+    payload: any
+  ) => void | Promise<void>;
 }
