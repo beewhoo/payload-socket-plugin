@@ -1,10 +1,10 @@
 {
   "name": "payload-socket-plugin",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Real-time Socket.IO plugin for Payload CMS with Redis support",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "browser": "dist/mock.js",
+  "browser": "dist/browser.js",
   "files": [
     "dist",
     "README.md"
@@ -30,9 +30,6 @@
   "engines": {
     "node": ">=20.0.0"
   },
-  "peerDependencies": {
-    "payload": "^2.0.0"
-  },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.0.0",
     "ioredis": "^5.3.0",
@@ -42,7 +39,6 @@
   "devDependencies": {
     "@types/jsonwebtoken": "^9.0.0",
     "@types/node": "^20.0.0",
-    "payload": "^2.0.0",
     "typescript": "^5.0.0"
   },
   "repository": {

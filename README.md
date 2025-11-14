@@ -18,7 +18,7 @@ Real-time event broadcasting plugin for Payload CMS using Socket.IO with Redis s
 ## Prerequisites
 
 - **Node.js**: >= 20.0.0
-- **Payload CMS**: >= 2.0.0
+- **Payload CMS**: ^2.0.0 || ^3.0.0
 - **Redis** (optional): Required for multi-instance deployments
 
 ## Installation
@@ -61,15 +61,17 @@ export default buildConfig({
         },
         path: "/socket.io",
       },
-      includeCollections: ["projects", "posts"],
+      includeCollections: ["posts", "users"],
       authorize: {
-        projects: async (user, event) => {
-          // Only allow project owner to receive events
-          return user.id === event.doc.user;
-        },
         posts: async (user, event) => {
           // Allow everyone to receive public post events
-          return event.doc.isPublic || user.id === event.doc.user;
+          return (
+            event.doc.status === "published" || user.id === event.doc.author
+          );
+        },
+        users: async (user, event) => {
+          // Only allow user to receive their own events
+          return user.id === event.id;
         },
       },
     }),
@@ -115,16 +117,16 @@ const socket = io("http://localhost:3000", {
 });
 
 // Subscribe to collection events
-socket.emit("join-collection", "projects");
+socket.emit("join-collection", "posts");
 
 // Listen for events
 socket.on("payload:event", (event) => {
   console.log("Event received:", event);
   // {
   //   type: 'update',
-  //   collection: 'projects',
+  //   collection: 'posts',
   //   id: '123',
-  //   doc: { ... },
+  //   doc: { title: 'My Post', status: 'published', ... },
   //   user: { id: '456', email: 'user@example.com' },
   //   timestamp: '2024-01-01T00:00:00.000Z'
   // }
@@ -153,28 +155,25 @@ Authorization handlers determine which users can receive events for specific doc
 ```typescript
 import type { CollectionAuthorizationHandler } from "payload-socket-plugin";
 
-const authorizeProject: CollectionAuthorizationHandler = async (
-  user,
-  event
-) => {
+const authorizePost: CollectionAuthorizationHandler = async (user, event) => {
   // Admin can see all events
   if (user.role === "admin") {
     return true;
   }
 
-  // Check if user owns the project
-  const project = await payload.findByID({
-    collection: "projects",
+  // Check if post is published or user is the author
+  const post = await payload.findByID({
+    collection: "posts",
     id: event.id as string,
   });
 
-  return user.id === project.user;
+  return post.status === "published" || user.id === post.author;
 };
 
 // Use in plugin config
 socketPlugin({
   authorize: {
-    projects: authorizeProject,
+    posts: authorizePost,
   },
 });
 ```
@@ -185,13 +184,13 @@ socketPlugin({
 
 ```typescript
 // Subscribe to a single collection
-socket.emit("join-collection", "projects");
+socket.emit("join-collection", "posts");
 
 // Subscribe to multiple collections
-socket.emit("subscribe", ["projects", "posts"]);
+socket.emit("subscribe", ["posts", "users", "media"]);
 
 // Unsubscribe
-socket.emit("unsubscribe", ["projects"]);
+socket.emit("unsubscribe", ["posts"]);
 ```
 
 ### Listening for Events
@@ -199,8 +198,8 @@ socket.emit("unsubscribe", ["projects"]);
 ```typescript
 // Listen to specific collection events
 socket.on("payload:event", (event) => {
-  if (event.collection === "projects" && event.type === "update") {
-    // Handle project update
+  if (event.collection === "posts" && event.type === "update") {
+    // Handle post update
   }
 });
 
@@ -346,6 +345,16 @@ socketPlugin({
 4. Authorization handlers determine which users receive the event
 5. Redis adapter ensures events sync across multiple server instances
 
+## Browser Compatibility
+
+This plugin includes automatic browser-safe mocking for the Payload admin panel. When bundled for the browser (e.g., in the Payload admin UI), the plugin automatically uses a mock implementation that:
+
+- Returns the config unchanged (no Socket.IO server initialization)
+- Provides no-op functions for `initSocketIO()` and `SocketIOManager` methods
+- Prevents server-side dependencies (Socket.IO, Redis) from being bundled in the browser
+
+This is handled automatically via the `"browser"` field in `package.json`, so you don't need to configure anything special. The Socket.IO server only runs on the server side.
+
 ## Environment Variables
 
 ```bash
@@ -428,7 +437,6 @@ import type {
 
 ## Known Limitations
 
-- Only supports Payload CMS v2.x (v3.x support coming soon)
 - Authorization handlers are called for each connected user on every event
 - No built-in event replay or history mechanism
 - Redis is required for multi-instance deployments
