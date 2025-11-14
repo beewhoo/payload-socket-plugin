@@ -1,4 +1,4 @@
-import type { Config } from "payload/config";
+import type { Config } from "payload";
 
 /**
  * Browser-safe mock for the Socket.IO plugin
@@ -16,39 +16,17 @@ export const socketPlugin =
  * Browser-safe mock for initSocketIO
  * Does nothing in browser environment
  */
-export const initSocketIO = async (): Promise<void> => {
+export const initSocketIO = async (httpServer?: any): Promise<void> => {
   // No-op in browser
   console.warn("initSocketIO called in browser environment - this is a no-op");
 };
 
 /**
  * Browser-safe mock for SocketIOManager
- * Returns a mock class that does nothing in browser environment
+ * Returns a minimal mock class in browser environment
  */
 export class SocketIOManager {
   constructor() {
     // No-op in browser
   }
-
-  async init(): Promise<null> {
-    console.warn(
-      "SocketIOManager.init called in browser environment - this is a no-op"
-    );
-    return null;
-  }
-
-  async emitEvent(): Promise<void> {
-    // No-op in browser
-  }
-
-  getIO(): null {
-    return null;
-  }
-
-  async close(): Promise<void> {
-    // No-op in browser
-  }
 }
-
-// Export types (these are safe for browser)
-export * from "./types";

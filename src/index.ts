@@ -1,11 +1,13 @@
-import { Config, Plugin } from "payload/config";
-import { CollectionConfig } from "payload/types";
+import type { Config } from "payload";
+import type { CollectionConfig } from "payload/types";
 import { SocketIOManager } from "./socketManager";
 import {
   RealtimeEventsPluginOptions,
   RealtimeEventPayload,
   EventType,
 } from "./types";
+
+type Plugin = (config: Config) => Config;
 
 /**
  * Payload CMS Plugin for Real-time Events

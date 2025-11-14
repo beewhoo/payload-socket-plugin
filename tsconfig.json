@@ -14,7 +14,13 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["src/**/*"],
+  "include": [
+    "src/index.ts",
+    "src/initSocketIO.ts",
+    "src/types.ts",
+    "src/socketManager.ts",
+    "src/browser.ts",
+    "payload-types.d.ts"
+  ],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }
-
