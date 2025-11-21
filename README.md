@@ -108,18 +108,26 @@ await initSocketIO(server);
 
 ```typescript
 // client.ts
-import { io } from "socket.io-client";
+import { io, Socket } from "socket.io-client";
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+} from "payload-socket-plugin";
 
-const socket = io("http://localhost:3000", {
-  auth: {
-    token: "your-jwt-token", // Get from Payload login
-  },
-});
+// Create a typed socket for full TypeScript support
+const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
+  "http://localhost:3000",
+  {
+    auth: {
+      token: "your-jwt-token", // Get from Payload login
+    },
+  }
+);
 
-// Subscribe to collection events
+// Subscribe to collection events (fully typed!)
 socket.emit("join-collection", "posts");
 
-// Listen for events
+// Listen for events (event parameter is fully typed!)
 socket.on("payload:event", (event) => {
   console.log("Event received:", event);
   // {
@@ -367,13 +375,95 @@ PAYLOAD_SECRET=your-secret-key
 
 ## TypeScript Types
 
+The plugin provides full TypeScript support with typed Socket.IO events following [Socket.IO v4 TypeScript best practices](https://socket.io/docs/v4/typescript/).
+
+### Available Types
+
 ```typescript
 import type {
+  // Event interfaces for Socket.IO
+  ServerToClientEvents,
+  ClientToServerEvents,
+  InterServerEvents,
+  SocketData,
+
+  // Plugin types
   CollectionAuthorizationHandler,
   RealtimeEventPayload,
   AuthenticatedSocket,
   EventType,
+  RealtimeEventsPluginOptions,
 } from "payload-socket-plugin";
+```
+
+### Typed Socket.IO Client
+
+Use the event interfaces for full type safety on the client side:
+
+```typescript
+import { io, Socket } from "socket.io-client";
+import type {
+  ServerToClientEvents,
+  ClientToServerEvents,
+} from "payload-socket-plugin";
+
+// Create a typed socket client
+const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
+  "http://localhost:3000",
+  {
+    auth: {
+      token: "your-jwt-token",
+    },
+  }
+);
+
+// Now you get full autocomplete and type checking!
+socket.emit("subscribe", ["posts", "users"]); // ✅ Type-safe
+socket.emit("join-collection", "posts"); // ✅ Type-safe
+
+socket.on("payload:event", (event) => {
+  // event is typed as RealtimeEventPayload
+  console.log(event.collection, event.type, event.doc);
+});
+
+socket.on("payload:event:all", (event) => {
+  // event is typed as RealtimeEventPayload
+  console.log("Global event:", event);
+});
+```
+
+### Event Interfaces
+
+**ServerToClientEvents** - Events the server emits to clients:
+
+```typescript
+interface ServerToClientEvents {
+  "payload:event": (event: RealtimeEventPayload) => void;
+  "payload:event:all": (event: RealtimeEventPayload) => void;
+}
+```
+
+**ClientToServerEvents** - Events clients can send to the server:
+
+```typescript
+interface ClientToServerEvents {
+  subscribe: (collections: string | string[]) => void;
+  unsubscribe: (collections: string | string[]) => void;
+  "join-collection": (collection: string) => void;
+}
+```
+
+**SocketData** - Data stored on each socket:
+
+```typescript
+interface SocketData {
+  user?: {
+    id: string | number;
+    email?: string;
+    collection?: string;
+    role?: string;
+  };
+}
 ```
 
 ## Troubleshooting

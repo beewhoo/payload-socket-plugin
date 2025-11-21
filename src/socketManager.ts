@@ -5,8 +5,11 @@ import { Server as HTTPServer } from "http";
 import jwt from "jsonwebtoken";
 import {
   RealtimeEventsPluginOptions,
-  AuthenticatedSocket,
   RealtimeEventPayload,
+  ServerToClientEvents,
+  ClientToServerEvents,
+  InterServerEvents,
+  SocketData,
 } from "./types";
 import payload from "payload";
 
@@ -15,7 +18,12 @@ import payload from "payload";
  * Supports multiple Payload instances for production environments
  */
 export class SocketIOManager {
-  private io: SocketIOServer | null = null;
+  private io: SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  > | null = null;
   private pubClient: Redis | null = null;
   private subClient: Redis | null = null;
   private options: RealtimeEventsPluginOptions;
@@ -27,11 +35,25 @@ export class SocketIOManager {
   /**
    * Initialize Socket.IO server with Redis adapter
    */
-  async init(server: HTTPServer): Promise<SocketIOServer> {
+  async init(
+    server: HTTPServer
+  ): Promise<
+    SocketIOServer<
+      ClientToServerEvents,
+      ServerToClientEvents,
+      InterServerEvents,
+      SocketData
+    >
+  > {
     const { redis, socketIO = {} } = this.options;
 
-    // Create Socket.IO server
-    this.io = new SocketIOServer(server, {
+    // Create Socket.IO server with typed events
+    this.io = new SocketIOServer<
+      ClientToServerEvents,
+      ServerToClientEvents,
+      InterServerEvents,
+      SocketData
+    >(server, {
       path: socketIO.path || "/socket.io",
       cors: socketIO.cors || {
         origin: "*",
@@ -50,10 +72,6 @@ export class SocketIOManager {
 
     // Setup connection handlers
     this.setupConnectionHandlers();
-
-    payload.logger.info(
-      "Socket.IO server initialized with real-time events plugin"
-    );
 
     return this.io;
   }
@@ -88,10 +106,6 @@ export class SocketIOManager {
       ]);
 
       this.io!.adapter(createAdapter(this.pubClient, this.subClient));
-
-      payload.logger.info(
-        "Redis adapter configured for Socket.IO multi-instance support"
-      );
     } catch (error) {
       payload.logger.error("Failed to setup Redis adapter:", error);
       throw error;
@@ -107,7 +121,7 @@ export class SocketIOManager {
    * Uses Payload CMS JWT verification and fetches user from database
    */
   private setupAuthentication(): void {
-    this.io!.use(async (socket: AuthenticatedSocket, next) => {
+    this.io!.use(async (socket, next) => {
       try {
         const token = socket.handshake.auth.token;
 
@@ -127,13 +141,16 @@ export class SocketIOManager {
             return next(new Error("User not found"));
           }
 
-          // Attach user info
-          socket.user = {
+          // Attach user info to socket.data
+          socket.data.user = {
             id: userDoc.id,
             email: (userDoc as any).email,
             collection: decoded.collection || "users",
             role: (userDoc as any).role,
           };
+
+          // Also attach to socket.user for backward compatibility
+          (socket as any).user = socket.data.user;
 
           next();
         } catch (jwtError) {
@@ -150,60 +167,46 @@ export class SocketIOManager {
    * Setup connection event handlers
    */
   private setupConnectionHandlers(): void {
-    this.io!.on("connection", async (socket: AuthenticatedSocket) => {
-      payload.logger.info(
-        `Client connected: ${socket.id}, User: ${
-          socket.user?.email || socket.user?.id
-        }`
-      );
-
+    this.io!.on("connection", async (socket) => {
       // Allow clients to subscribe to specific collections
-      socket.on("subscribe", (collections: string | string[]) => {
+      socket.on("subscribe", (collections) => {
         const collectionList = Array.isArray(collections)
           ? collections
           : [collections];
         collectionList.forEach((collection) => {
           socket.join(`collection:${collection}`);
-          payload.logger.info(
-            `Client ${socket.id} subscribed to collection: ${collection}`
-          );
         });
       });
 
       // Allow clients to unsubscribe from collections
-      socket.on("unsubscribe", (collections: string | string[]) => {
+      socket.on("unsubscribe", (collections) => {
         const collectionList = Array.isArray(collections)
           ? collections
           : [collections];
         collectionList.forEach((collection) => {
           socket.leave(`collection:${collection}`);
-          payload.logger.info(
-            `Client ${socket.id} unsubscribed from collection: ${collection}`
-          );
         });
       });
 
       // Allow clients to join collection rooms (alias for subscribe)
-      socket.on("join-collection", (collection: string) => {
+      socket.on("join-collection", (collection) => {
         const roomName = `collection:${collection}`;
         socket.join(roomName);
-        payload.logger.info(
-          `Client ${socket.id} (${socket.user?.email}) joined collection room: ${roomName}`
-        );
       });
 
       // Handle disconnection
       socket.on("disconnect", () => {
-        payload.logger.info(
-          `Client disconnected: ${socket.id}, User: ${
-            socket.user?.email || socket.user?.id
-          }`
-        );
+        // Cleanup happens automatically
       });
 
       if (this.options.onSocketConnection) {
         try {
-          await this.options.onSocketConnection(socket, this.io!, payload);
+          // Cast to AuthenticatedSocket for backward compatibility
+          await this.options.onSocketConnection(
+            socket as any,
+            this.io!,
+            payload
+          );
         } catch (error) {
           payload.logger.error(
             `Error in custom socket connection handler: ${error}`
@@ -218,9 +221,6 @@ export class SocketIOManager {
    */
   async emitEvent(event: RealtimeEventPayload): Promise<void> {
     if (!this.io) {
-      payload.logger.warn(
-        "Socket.IO server not initialized, cannot emit event"
-      );
       return;
     }
 
@@ -245,12 +245,9 @@ export class SocketIOManager {
       if (collectionHandler) {
         const sockets = await this.io.in(room).fetchSockets();
         for (const socket of sockets) {
-          const authSocket = socket as unknown as AuthenticatedSocket;
-          if (authSocket.user) {
-            const isAuthorized = await collectionHandler(
-              authSocket.user,
-              finalEvent
-            );
+          const user = socket.data.user || (socket as any).user;
+          if (user) {
+            const isAuthorized = await collectionHandler(user, finalEvent);
             if (isAuthorized) {
               socket.emit("payload:event", finalEvent);
             }
@@ -270,7 +267,12 @@ export class SocketIOManager {
   /**
    * Get Socket.IO server instance
    */
-  getIO(): SocketIOServer | null {
+  getIO(): SocketIOServer<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  > | null {
     return this.io;
   }
 
@@ -289,7 +291,5 @@ export class SocketIOManager {
     if (this.subClient) {
       await this.subClient.quit();
     }
-
-    payload.logger.info("Socket.IO server closed");
   }
 }

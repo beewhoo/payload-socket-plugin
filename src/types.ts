@@ -28,9 +28,57 @@ export interface RealtimeEventPayload {
 }
 
 /**
- * Socket.IO server instance with authentication
+ * Events that the server can emit to clients
  */
-export interface AuthenticatedSocket extends Socket {
+export interface ServerToClientEvents {
+  /** Real-time event for a specific collection */
+  "payload:event": (event: RealtimeEventPayload) => void;
+  /** Real-time event broadcast to all listeners */
+  "payload:event:all": (event: RealtimeEventPayload) => void;
+}
+
+/**
+ * Events that clients can send to the server
+ */
+export interface ClientToServerEvents {
+  /** Subscribe to one or more collections */
+  subscribe: (collections: string | string[]) => void;
+  /** Unsubscribe from one or more collections */
+  unsubscribe: (collections: string | string[]) => void;
+  /** Join a collection room (alias for subscribe) */
+  "join-collection": (collection: string) => void;
+}
+
+/**
+ * Events for inter-server communication (when using Redis adapter)
+ */
+export interface InterServerEvents {
+  ping: () => void;
+}
+
+/**
+ * Data stored on each socket instance
+ */
+export interface SocketData {
+  user?: {
+    id: string | number;
+    email?: string;
+    collection?: string;
+    role?: string;
+  };
+}
+
+/**
+ * Socket.IO server instance with authentication
+ * @deprecated Use Socket<ClientToServerEvents, ServerToClientEvents, InterServerEvents, SocketData> instead
+ */
+export interface AuthenticatedSocket
+  extends Socket<
+    ClientToServerEvents,
+    ServerToClientEvents,
+    InterServerEvents,
+    SocketData
+  > {
   user?: {
     id: string | number;
     email?: string;
