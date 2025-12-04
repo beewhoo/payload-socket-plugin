@@ -357,12 +357,24 @@ This is handled automatically via the `"browser"` field in `package.json`, so yo
 
 ## Environment Variables
 
+The plugin does not read environment variables directly. You can use environment variables in your configuration:
+
 ```bash
-# Required for Redis multi-instance support
+# Example: Redis URL for multi-instance support
 REDIS_URL=redis://localhost:6379
 
 # Optional: Payload configuration
 PAYLOAD_SECRET=your-secret-key
+```
+
+Then pass them in your plugin configuration:
+
+```typescript
+socketPlugin({
+  redis: {
+    url: process.env.REDIS_URL,
+  },
+});
 ```
 
 ## TypeScript Types
@@ -406,10 +418,11 @@ import type {
 
 **Solutions**:
 
-- Verify `REDIS_URL` environment variable is set correctly
+- Verify `redis.url` is set correctly in plugin options
 - Check Redis server is running and accessible
 - Ensure both server instances use the same Redis URL
 - Check Redis logs for connection errors
+- Make sure you're passing the Redis URL in the plugin configuration, not relying on environment variables
 
 ### TypeScript Errors
 

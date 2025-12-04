@@ -62,11 +62,11 @@ export class SocketIOManager {
    * Setup Redis adapter for multi-instance synchronization
    */
   private async setupRedisAdapter(): Promise<void> {
-    const redisUrl = process.env.REDIS_URL;
+    const redisUrl = this.options.redis?.url;
 
     if (!redisUrl) {
       payload.logger.warn(
-        "REDIS_URL not configured. Skipping Redis adapter setup."
+        "Redis URL not configured. Skipping Redis adapter setup. Set redis.url in plugin options."
       );
       return;
     }
