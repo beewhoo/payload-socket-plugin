@@ -434,6 +434,43 @@ import type {
 - Check that your `tsconfig.json` includes the plugin's types
 - Verify Payload CMS version compatibility (>= 2.0.0)
 
+## Multi-Instance Deployments with Redis
+
+When using Redis adapter for multi-instance deployments, user data is automatically synchronized across all server instances:
+
+- **`socket.data.user`**: Automatically synchronized across servers via Redis adapter
+- **`socket.user`**: Only available on the local server where the socket connected (backward compatibility)
+
+### Accessing User Data in Custom Handlers
+
+```typescript
+socketPlugin({
+  onSocketConnection: (socket, io, payload) => {
+    socket.on("get-active-users", async (roomName) => {
+      const sockets = await io.in(roomName).fetchSockets();
+
+      const users = sockets.map((s) => {
+        // Use socket.data.user for Redis compatibility (works across all servers)
+        // Fallback to socket.user for local connections
+        const user = s.data.user || (s as any).user;
+        return {
+          id: user?.id,
+          email: user?.email,
+        };
+      });
+
+      socket.emit("active-users", users);
+    });
+  },
+});
+```
+
+**Important**: When using `io.in(room).fetchSockets()` with Redis adapter:
+
+- Remote sockets (from other servers) will have `socket.data.user` populated
+- Local sockets will have both `socket.data.user` and `socket.user` populated
+- Always check `socket.data.user` first for Redis compatibility
+
 ## Performance Considerations
 
 - **Redis**: Highly recommended for production multi-instance deployments

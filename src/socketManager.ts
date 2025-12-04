@@ -127,13 +127,19 @@ export class SocketIOManager {
             return next(new Error("User not found"));
           }
 
-          // Attach user info
-          socket.user = {
+          const userInfo = {
             id: userDoc.id,
             email: (userDoc as any).email,
             collection: decoded.collection || "users",
             role: (userDoc as any).role,
           };
+
+          // Store in socket.data for Redis adapter compatibility
+          // socket.data is automatically synchronized across servers via Redis
+          socket.data.user = userInfo;
+
+          // Also attach to socket.user for backward compatibility
+          socket.user = userInfo;
 
           next();
         } catch (jwtError) {
@@ -246,11 +252,10 @@ export class SocketIOManager {
         const sockets = await this.io.in(room).fetchSockets();
         for (const socket of sockets) {
           const authSocket = socket as unknown as AuthenticatedSocket;
-          if (authSocket.user) {
-            const isAuthorized = await collectionHandler(
-              authSocket.user,
-              finalEvent
-            );
+          // Use socket.data.user for remote sockets (Redis adapter), fallback to socket.user for local
+          const user = socket.data.user || authSocket.user;
+          if (user) {
+            const isAuthorized = await collectionHandler(user, finalEvent);
             if (isAuthorized) {
               socket.emit("payload:event", finalEvent);
             }
