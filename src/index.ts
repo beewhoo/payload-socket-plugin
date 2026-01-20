@@ -1,5 +1,4 @@
-import type { Config } from "payload";
-import type { CollectionConfig } from "payload/types";
+import type { Config, CollectionConfig } from "payload";
 import { SocketIOManager } from "./socketManager";
 import {
   RealtimeEventsPluginOptions,
@@ -45,7 +44,7 @@ type Plugin = (config: Config) => Config;
  * ```
  */
 export const socketPlugin = (
-  pluginOptions: RealtimeEventsPluginOptions = {}
+  pluginOptions: RealtimeEventsPluginOptions = {},
 ): Plugin => {
   return (incomingConfig: Config): Config => {
     // Default options
@@ -81,7 +80,7 @@ export const socketPlugin = (
     const createEventPayload = (
       type: EventType,
       collection: string,
-      args: any
+      args: any,
     ): RealtimeEventPayload => {
       return {
         type,
@@ -126,14 +125,14 @@ export const socketPlugin = (
                   const event = createEventPayload(
                     "update",
                     collection.slug,
-                    args
+                    args,
                   );
 
                   await socketManager.emitEvent(event);
                 } catch (error) {
                   console.error(
                     `Error emitting update event for ${collection.slug}:`,
-                    error
+                    error,
                   );
                 }
               },
@@ -146,14 +145,14 @@ export const socketPlugin = (
                   const event = createEventPayload(
                     "delete",
                     collection.slug,
-                    args
+                    args,
                   );
 
                   await socketManager.emitEvent(event);
                 } catch (error) {
                   console.error(
                     `Error emitting delete event for ${collection.slug}:`,
-                    error
+                    error,
                   );
                 }
               },
@@ -171,13 +170,10 @@ export const socketPlugin = (
         await incomingConfig.onInit(payload);
       }
 
-      // Initialize Socket.IO server
-      // The server instance is available after Payload initializes with Express
-      if (payload.express) {
-        // Store the socket manager for later initialization
-        // The HTTP server will be initialized in server.ts using initSocketIO()
-        (payload as any).__socketManager = socketManager;
-      }
+      // Store the socket manager for later initialization
+      // The HTTP server will be initialized in server.ts using initSocketIO()
+      // This works for both standard Payload server and custom Express servers
+      (payload as any).__socketManager = socketManager;
     };
 
     return {

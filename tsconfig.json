@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
-    "target": "ES2020",
+    "target": "es2019",
     "module": "commonjs",
     "lib": ["ES2020"],
+    "allowJs": true,
     "declaration": true,
     "outDir": "./dist",
     "rootDir": "./src",
@@ -14,13 +15,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": [
-    "src/index.ts",
-    "src/initSocketIO.ts",
-    "src/types.ts",
-    "src/socketManager.ts",
-    "src/browser.ts",
-    "payload-types.d.ts"
-  ],
+  "include": ["src", "payload-types.d.ts"],
   "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

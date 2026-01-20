@@ -8,7 +8,7 @@ import {
   AuthenticatedSocket,
   RealtimeEventPayload,
 } from "./types";
-import payload from "payload";
+import type { Payload } from "payload";
 
 /**
  * Socket.IO Manager for handling real-time events with Redis adapter
@@ -19,6 +19,7 @@ export class SocketIOManager {
   private pubClient: Redis | null = null;
   private subClient: Redis | null = null;
   private options: RealtimeEventsPluginOptions;
+  private payload: Payload | null = null;
 
   constructor(options: RealtimeEventsPluginOptions) {
     this.options = options;
@@ -27,7 +28,11 @@ export class SocketIOManager {
   /**
    * Initialize Socket.IO server with Redis adapter
    */
-  async init(server: HTTPServer): Promise<SocketIOServer> {
+  async init(
+    server: HTTPServer,
+    payloadInstance: Payload,
+  ): Promise<SocketIOServer> {
+    this.payload = payloadInstance;
     const { redis, socketIO = {} } = this.options;
 
     // Create Socket.IO server
@@ -51,8 +56,8 @@ export class SocketIOManager {
     // Setup connection handlers
     this.setupConnectionHandlers();
 
-    payload.logger.info(
-      "Socket.IO server initialized with real-time events plugin"
+    this.payload!.logger.info(
+      "Socket.IO server initialized with real-time events plugin",
     );
 
     return this.io;
@@ -65,8 +70,8 @@ export class SocketIOManager {
     const redisUrl = this.options.redis?.url;
 
     if (!redisUrl) {
-      payload.logger.warn(
-        "Redis URL not configured. Skipping Redis adapter setup. Set redis.url in plugin options."
+      this.payload!.logger.warn(
+        "Redis URL not configured. Skipping Redis adapter setup. Set redis.url in plugin options.",
       );
       return;
     }
@@ -89,11 +94,11 @@ export class SocketIOManager {
 
       this.io!.adapter(createAdapter(this.pubClient, this.subClient));
 
-      payload.logger.info(
-        "Redis adapter configured for Socket.IO multi-instance support"
+      this.payload!.logger.info(
+        "Redis adapter configured for Socket.IO multi-instance support",
       );
     } catch (error) {
-      payload.logger.error("Failed to setup Redis adapter:", error);
+      this.payload!.logger.error("Failed to setup Redis adapter:", error);
       throw error;
     }
   }
@@ -115,10 +120,10 @@ export class SocketIOManager {
           return next(new Error("Authentication token required"));
         }
         try {
-          const decoded = jwt.verify(token, payload.secret) as any;
+          const decoded = jwt.verify(token, this.payload!.secret) as any;
 
           // Fetch full user document from Payload
-          const userDoc = await payload.findByID({
+          const userDoc = await this.payload!.findByID({
             collection: decoded.collection || "users",
             id: decoded.id,
           });
@@ -146,7 +151,7 @@ export class SocketIOManager {
           return next(new Error("Invalid authentication token"));
         }
       } catch (error) {
-        payload.logger.error("Socket authentication error:", error);
+        this.payload!.logger.error("Socket authentication error:", error);
         next(new Error("Authentication failed"));
       }
     });
@@ -157,10 +162,10 @@ export class SocketIOManager {
    */
   private setupConnectionHandlers(): void {
     this.io!.on("connection", async (socket: AuthenticatedSocket) => {
-      payload.logger.info(
+      this.payload!.logger.info(
         `Client connected: ${socket.id}, User: ${
           socket.user?.email || socket.user?.id
-        }`
+        }`,
       );
 
       // Allow clients to subscribe to specific collections
@@ -170,8 +175,8 @@ export class SocketIOManager {
           : [collections];
         collectionList.forEach((collection) => {
           socket.join(`collection:${collection}`);
-          payload.logger.info(
-            `Client ${socket.id} subscribed to collection: ${collection}`
+          this.payload!.logger.info(
+            `Client ${socket.id} subscribed to collection: ${collection}`,
           );
         });
       });
@@ -183,8 +188,8 @@ export class SocketIOManager {
           : [collections];
         collectionList.forEach((collection) => {
           socket.leave(`collection:${collection}`);
-          payload.logger.info(
-            `Client ${socket.id} unsubscribed from collection: ${collection}`
+          this.payload!.logger.info(
+            `Client ${socket.id} unsubscribed from collection: ${collection}`,
           );
         });
       });
@@ -193,26 +198,30 @@ export class SocketIOManager {
       socket.on("join-collection", (collection: string) => {
         const roomName = `collection:${collection}`;
         socket.join(roomName);
-        payload.logger.info(
-          `Client ${socket.id} (${socket.user?.email}) joined collection room: ${roomName}`
+        this.payload!.logger.info(
+          `Client ${socket.id} (${socket.user?.email}) joined collection room: ${roomName}`,
         );
       });
 
       // Handle disconnection
       socket.on("disconnect", () => {
-        payload.logger.info(
+        this.payload!.logger.info(
           `Client disconnected: ${socket.id}, User: ${
             socket.user?.email || socket.user?.id
-          }`
+          }`,
         );
       });
 
       if (this.options.onSocketConnection) {
         try {
-          await this.options.onSocketConnection(socket, this.io!, payload);
+          await this.options.onSocketConnection(
+            socket,
+            this.io!,
+            this.payload!,
+          );
         } catch (error) {
-          payload.logger.error(
-            `Error in custom socket connection handler: ${error}`
+          this.payload!.logger.error(
+            `Error in custom socket connection handler: ${error}`,
           );
         }
       }
@@ -224,8 +233,8 @@ export class SocketIOManager {
    */
   async emitEvent(event: RealtimeEventPayload): Promise<void> {
     if (!this.io) {
-      payload.logger.warn(
-        "Socket.IO server not initialized, cannot emit event"
+      this.payload!.logger.warn(
+        "Socket.IO server not initialized, cannot emit event",
       );
       return;
     }
@@ -295,6 +304,8 @@ export class SocketIOManager {
       await this.subClient.quit();
     }
 
-    payload.logger.info("Socket.IO server closed");
+    if (this.payload) {
+      this.payload.logger.info("Socket.IO server closed");
+    }
   }
 }

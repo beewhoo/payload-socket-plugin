@@ -6,6 +6,9 @@
 
 Real-time event broadcasting plugin for Payload CMS using Socket.IO with Redis support for multi-instance deployments.
 
+> **Version 2.0.0+** supports Payload CMS v3.72.0+
+> For Payload v2, use [v1.x](https://github.com/beewhoo/payload-socket-plugin/tree/v1.1.5)
+
 ## Features
 
 - ✅ **Real-time Events**: Broadcast collection changes (create, update, delete) to connected clients
@@ -18,17 +21,21 @@ Real-time event broadcasting plugin for Payload CMS using Socket.IO with Redis s
 ## Prerequisites
 
 - **Node.js**: >= 20.0.0
-- **Payload CMS**: ^2.0.0 || ^3.0.0
+- **Payload CMS**: ^3.72.0 (for v2.x of this plugin)
 - **Redis** (optional): Required for multi-instance deployments
 
 ## Installation
 
+### For Payload v3 (Current)
+
 ```bash
-npm install payload-socket-plugin
-# or
-yarn add payload-socket-plugin
-# or
-pnpm add payload-socket-plugin
+npm install payload-socket-plugin@^2.0.0
+```
+
+### For Payload v2 (Legacy)
+
+```bash
+npm install payload-socket-plugin@^1.0.0
 ```
 
 ### Install Socket.IO Client (for frontend)
@@ -37,13 +44,13 @@ pnpm add payload-socket-plugin
 npm install socket.io-client
 ```
 
-## Quick Start
+## Quick Start (Payload v3)
 
 ### 1. Configure the Plugin
 
 ```typescript
 // payload.config.ts
-import { buildConfig } from "payload/config";
+import { buildConfig } from "payload";
 import { socketPlugin } from "payload-socket-plugin";
 
 export default buildConfig({
@@ -79,29 +86,42 @@ export default buildConfig({
 });
 ```
 
-### 2. Initialize Socket.IO Server
+### 2. Initialize Socket.IO Server (Next.js Custom Server)
 
 ```typescript
 // server.ts
 import express from "express";
-import payload from "payload";
+import { createServer } from "http";
+import next from "next";
+import { getPayload } from "payload";
 import { initSocketIO } from "payload-socket-plugin";
+import config from "@payload-config";
 
-const app = express();
+const port = parseInt(process.env.PORT || "3000", 10);
+const dev = process.env.NODE_ENV !== "production";
+const app = next({ dev });
+const handle = app.getRequestHandler();
 
-// Initialize Payload
-await payload.init({
-  secret: process.env.PAYLOAD_SECRET,
-  express: app,
+app.prepare().then(async () => {
+  const server = express();
+
+  // Let Next.js handle all routes
+  server.all("*", (req, res) => handle(req, res));
+
+  // Create HTTP server
+  const httpServer = createServer(server);
+
+  // Get Payload instance
+  const payload = await getPayload({ config });
+
+  // Initialize Socket.IO with the payload instance
+  await initSocketIO(httpServer, payload);
+
+  // Start server
+  httpServer.listen(port, () => {
+    console.log(`Server listening on port ${port}`);
+  });
 });
-
-// Start HTTP server
-const server = app.listen(3000, () => {
-  console.log("Server running on port 3000");
-});
-
-// Initialize Socket.IO
-await initSocketIO(server);
 ```
 
 ### 3. Connect from Client
@@ -490,6 +510,99 @@ socketPlugin({
 - Authorization handlers are called for each connected user on every event
 - No built-in event replay or history mechanism
 - Redis is required for multi-instance deployments
+
+## Migration Guide
+
+### Migrating from v1.x (Payload v2) to v2.x (Payload v3)
+
+Version 2.0.0 introduces breaking changes to support Payload CMS v3:
+
+#### 1. Update Dependencies
+
+```bash
+npm install payload@^3.72.0 payload-socket-plugin@^2.0.0
+```
+
+#### 2. Update Import Paths
+
+```typescript
+// ❌ Old (v1.x)
+import { buildConfig } from "payload/config";
+
+// ✅ New (v2.x)
+import { buildConfig } from "payload";
+```
+
+#### 3. Update Server Initialization
+
+The `initSocketIO` function now requires the Payload instance as a parameter:
+
+```typescript
+// ❌ Old (v1.x)
+import payload from "payload";
+import { initSocketIO } from "payload-socket-plugin";
+
+await payload.init({ secret, express: app });
+const server = app.listen(3000);
+await initSocketIO(server);
+```
+
+```typescript
+// ✅ New (v2.x)
+import { getPayload } from "payload";
+import { initSocketIO } from "payload-socket-plugin";
+import config from "@payload-config";
+
+const payload = await getPayload({ config });
+const httpServer = createServer(app);
+await initSocketIO(httpServer, payload);
+```
+
+#### 4. Update Next.js Integration
+
+Payload v3 uses Next.js by default. Update your server setup:
+
+```typescript
+// server.ts (Payload v3 with Next.js)
+import express from "express";
+import { createServer } from "http";
+import next from "next";
+import { getPayload } from "payload";
+import { initSocketIO } from "payload-socket-plugin";
+import config from "@payload-config";
+
+const app = next({ dev: process.env.NODE_ENV !== "production" });
+const handle = app.getRequestHandler();
+
+app.prepare().then(async () => {
+  const server = express();
+  server.all("*", (req, res) => handle(req, res));
+
+  const httpServer = createServer(server);
+  const payload = await getPayload({ config });
+
+  await initSocketIO(httpServer, payload);
+
+  httpServer.listen(3000);
+});
+```
+
+#### 5. Environment Variables
+
+Make sure to set `SOCKET_ENABLED=true` in your `.env` file if you're using the `enabled` option:
+
+```bash
+# .env
+SOCKET_ENABLED=true
+REDIS_URL=redis://localhost:6379
+```
+
+#### Breaking Changes Summary
+
+- **Minimum Payload version**: Now requires Payload v3.72.0+
+- **`initSocketIO` signature**: Now requires `(httpServer, payloadInstance)` instead of just `(httpServer)`
+- **Import paths**: Changed from `payload/config` to `payload`
+- **Payload initialization**: Use `getPayload({ config })` instead of `payload.init()`
 
 ## Changelog
 
